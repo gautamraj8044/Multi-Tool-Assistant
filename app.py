@@ -1,9 +1,10 @@
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
 from langchain.agents import initialize_agent, Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 import requests
 import os
-import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -11,8 +12,11 @@ load_dotenv()
 # Fetching the Weather API Key from environment variables
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
+# FastAPI app initialization
+app = FastAPI()
+
 # Function to fetch and return weather data for a given location
-def get_weather(location):
+def get_weather(location: str):
     url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={WEATHER_API_KEY}&units=metric"
     response = requests.get(url)
     if response.status_code == 200:
@@ -27,7 +31,7 @@ def get_weather(location):
 todo_list = []
 event_list = []
 
-def add_task(task):
+def add_task(task: str):
     todo_list.append(task)
     return f"Task '{task}' added to your To-Do list!"
 
@@ -37,7 +41,7 @@ def show_tasks():
     return "\n".join([f"{i + 1}. {task}" for i, task in enumerate(todo_list)])
 
 # Basic calendar functionality: Add and show events
-def add_event(event):
+def add_event(event: str):
     return f"Event '{event}' has been added to your calendar!"
 
 def show_events():
@@ -46,7 +50,7 @@ def show_events():
     return "\n".join([f"{i + 1}. {event}" for i, event in enumerate(event_list)])
 
 # Function to fetch EV charging stations near a given city
-def get_ev_charging_stations(city):
+def get_ev_charging_stations(city: str):
     url = "https://ev-charge-finder.p.rapidapi.com/search-by-location"
     querystring = {"near": city, "limit": "20"}
     headers = {
@@ -115,13 +119,14 @@ tools = [
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
 agent = initialize_agent(tools, llm, agent="zero-shot-react-description", verbose=True)
 
-# Example conversation loop with user input
-while True:
-    user_input = input("\nHow can I assist you? (Type 'exit' to quit): ")
-    if user_input.lower() == "exit":
-        break
+# FastAPI route to handle user input and get agent response
+@app.get("/assist/")
+async def assist(user_input: str):
+    # Pass user input to the LangChain agent
     response = agent.invoke(user_input)
     
-    # Extract and print the response output
+    # Extract and return the response output
     response_str = response.get('output', '')  # Default to empty string if no 'output' key
-    print("\n" + response_str)
+    return {"response": response_str}
+
+# Run the app with: uvicorn filename:app --reload
