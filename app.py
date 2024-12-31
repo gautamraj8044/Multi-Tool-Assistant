@@ -12,20 +12,23 @@ load_dotenv()
 # Fetching the Weather API Key from environment variables
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
+
 # FastAPI app initialization
 app = FastAPI()
 
 # Function to fetch and return weather data for a given location
 def get_weather(location: str):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={WEATHER_API_KEY}&units=metric"
-    response = requests.get(url)
-    if response.status_code == 200:
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error for bad responses
         data = response.json()
         weather_desc = data["weather"][0]["description"]
         temp = data["main"]["temp"]
         return f"The current weather in {location} is {weather_desc} with a temperature of {temp}°C."
-    else:
-        return "Sorry, I couldn't fetch the weather for that location."
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching weather: {e}"
+
 
 # To-Do list functionality: Add and show tasks
 todo_list = []
@@ -54,7 +57,7 @@ def get_ev_charging_stations(city: str):
     url = "https://ev-charge-finder.p.rapidapi.com/search-by-location"
     querystring = {"near": city, "limit": "20"}
     headers = {
-        "x-rapidapi-key": "bea4fbecfamsh387f15bb64e582bp142354jsncf45b337573e",
+        "x-rapidapi-key": os.getenv("x-rapidapi-key"),
         "x-rapidapi-host": "ev-charge-finder.p.rapidapi.com"
     }
     response = requests.get(url, headers=headers, params=querystring)
