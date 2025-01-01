@@ -14,6 +14,7 @@ load_dotenv()
 
 # Weather API Key
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+RAPID_API_KEY = os.getenv("x-rapidapi-key")
 
 # Function to fetch weather data
 def get_weather(location):
@@ -56,7 +57,7 @@ def get_ev_charging_stations(city):
     url = "https://ev-charge-finder.p.rapidapi.com/search-by-location"
     querystring = {"near": city, "limit": "20"}
     headers = {
-        "x-rapidapi-key": "bea4fbecfamsh387f15bb64e582bp142354jsncf45b337573e",
+        "x-rapidapi-key": RAPID_API_KEY,
         "x-rapidapi-host": "ev-charge-finder.p.rapidapi.com"
     }
     response = requests.get(url, headers=headers, params=querystring)
