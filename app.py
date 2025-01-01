@@ -1,50 +1,50 @@
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
 from langchain.agents import initialize_agent, Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+from database import create_table,add_task_to_db,show_tasks_from_db,delete_task
 import requests
 import os
+import json
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
-# Fetching the Weather API Key from environment variables
+# Weather API Key
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
-
-# FastAPI app initialization
-app = FastAPI()
-
-# Function to fetch and return weather data for a given location
-def get_weather(location: str):
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
+# Function to fetch weather data
+def get_weather(location):
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={WEATHER_API_KEY}&units=metric"
+    response = requests.get(url)
+    if response.status_code == 200:
         data = response.json()
         weather_desc = data["weather"][0]["description"]
         temp = data["main"]["temp"]
         return f"The current weather in {location} is {weather_desc} with a temperature of {temp}°C."
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching weather: {e}"
+    else:
+        return "Sorry, I couldn't fetch the weather for that location."
 
+create_table()
+event_list=[]
+search = DuckDuckGoSearchRun()
+wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
 
-# To-Do list functionality: Add and show tasks
-todo_list = []
-event_list = []
-
-def add_task(task: str):
-    todo_list.append(task)
-    return f"Task '{task}' added to your To-Do list!"
+def add_task(task):
+    return add_task_to_db(task)
 
 def show_tasks():
-    if not todo_list:
-        return "Your To-Do list is empty."
-    return "\n".join([f"{i + 1}. {task}" for i, task in enumerate(todo_list)])
+    return show_tasks_from_db()
 
-# Basic calendar functionality: Add and show events
-def add_event(event: str):
+
+def delete_task_from_db(task_id):
+    return delete_task(task_id)
+
+# Calendar functionality (basic placeholder)
+def add_event(event):
+    event_list.append(event)
     return f"Event '{event}' has been added to your calendar!"
 
 def show_events():
@@ -52,12 +52,11 @@ def show_events():
         return "Your calendar is empty."
     return "\n".join([f"{i + 1}. {event}" for i, event in enumerate(event_list)])
 
-# Function to fetch EV charging stations near a given city
-def get_ev_charging_stations(city: str):
+def get_ev_charging_stations(city):
     url = "https://ev-charge-finder.p.rapidapi.com/search-by-location"
     querystring = {"near": city, "limit": "20"}
     headers = {
-        "x-rapidapi-key": os.getenv("x-rapidapi-key"),
+        "x-rapidapi-key": "bea4fbecfamsh387f15bb64e582bp142354jsncf45b337573e",
         "x-rapidapi-host": "ev-charge-finder.p.rapidapi.com"
     }
     response = requests.get(url, headers=headers, params=querystring)
@@ -72,11 +71,12 @@ def get_ev_charging_stations(city: str):
                 station_info += f"  Connector Type: {connector['type']}\n"
                 station_info += f"    Total: {connector['total']}\n"
                 
-                # Handle missing 'kw' or 'speed' key gracefully
-                kw = connector.get('kw', 'N/A')
+                # Safely handle missing 'kw' key
+                kw = connector.get('kw', 'N/A')  # Use 'N/A' if 'kw' key is not present
                 station_info += f"    kW: {kw}\n"
                 
-                speed = connector.get('speed', 'N/A')
+                # Safely handle missing 'speed' key
+                speed = connector.get('speed', 'N/A')  # Use 'N/A' if 'speed' key is not present
                 station_info += f"    Speed: {speed}\n"
                 
             stations_info.append(station_info)
@@ -84,43 +84,43 @@ def get_ev_charging_stations(city: str):
     else:
         return "Sorry, I couldn't fetch EV charging stations for that location."
 
-# Define tools for LangChain agent to interact with
+
 tools = [
     Tool(
         name="Weather Tool",
         func=lambda location: get_weather(location),
-        description="Use this tool to get the current weather in any location.",
+        description="Get current weather in any location.",
     ),
     Tool(
-        name="To-Do List Manager",
+        name="Add Task",
         func=lambda task: add_task(task),
-        description="Use this tool to add tasks to your To-Do list.",
+        description="Add tasks to your To-Do list.",
     ),
     Tool(
-        name="Show To-Do List",
+        name="Show Tasks",
         func=lambda _: show_tasks(),
-        description="Use this tool to view all tasks in your To-Do list.",
+        description="View all tasks in your To-Do list.",
     ),
     Tool(
-        name="Calendar Manager",
-        func=lambda event: add_event(event),
-        description="Use this tool to add events to your calendar.",
+        name="Delete Task",
+        func=lambda task_id: delete_task_from_db(task_id),
+        description="Delete a task from your To-Do list.",
     ),
     Tool(
-        name="Show Calendar",
-        func=lambda _: show_events(),
-        description="Use this tool to view all events in your calendar.",
+        name="DuckDuckGo Search",
+        func=lambda query: search.run(query),
+        description="Search for information using DuckDuckGo.",
     ),
     Tool(
-        name="EV Charging Station Finder",
-        func=lambda city: get_ev_charging_stations(city),
-        description="Use this tool to find EV charging stations near a given city.",
+        name="Wikipedia Search",
+        func=lambda query: wikipedia.run(query),
+        description="Search for information on Wikipedia.",
     ),
 ]
 
 # Initialize the LLM (Language Model) and agent
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
-agent = initialize_agent(tools, llm, agent="zero-shot-react-description", verbose=True)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-8b")
+agent = initialize_agent(tools, llm, agent="zero-shot-react-description", verbose=True,handle_parsing_errors=True)
 
 # FastAPI route to handle user input and get agent response
 @app.get("/assist/")
